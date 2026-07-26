@@ -1,0 +1,15 @@
+# artefactos gerados
+projects/*/scene.blend
+projects/*/renders*/
+projects/*/views/
+projects/*/clips*/
+projects/*/dist/
+projects/*/qa/
+projects/*/teaser*.mp4
+__pycache__/
+# material de trabalho local — nunca commitar
+docs/
+*.pdf
+NOTES.md
+.superpowers/
+.playwright-mcp/

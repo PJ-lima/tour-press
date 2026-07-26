@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"
+        integrity="sha384-02yn80EH0cF+s23taAmuhEZ04p3CTbQvV0QZMr2reUxajpfvcLNKlzsPkZwx14mf"
+        crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"
+          integrity="sha384-S5+w/JlcNAOymqXGNrvzn2F++XsaHTJdex6KE5VbKryfFgqJiRUJOgOkUqaiOZTf"
+          crossorigin="anonymous"></script>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #panorama { width: 100%; height: 100%; }
+    #brand {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      font-family: system-ui, sans-serif; font-size: 13px;
+      color: #fff; background: rgba(0,0,0,.55);
+      padding: 6px 12px; border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="panorama"></div>
+  <div id="brand">{{TITLE}}</div>
+  <script>
+    pannellum.viewer('panorama', {{TOUR_CONFIG}});
+  </script>
+</body>
+</html>
