@@ -1,0 +1,102 @@
+{
+  "title": "Demo T2 — Tour Virtual",
+  "firstScene": "sala",
+  "_yawConvention": "Câmaras 360 Blender: rotation_euler=(90°,0,0) para todas — o centro horizontal do render equirectangular (yaw=0 no Pannellum) aponta para +Y do mundo (Norte). +X do mundo é Este. yaw = atan2(dx, dy) em graus, dx = alvo.x - câmara.x, dy = alvo.y - câmara.y (bearing tipo bússola, sentido horário a partir do Norte). Verificado empiricamente em sala.png: vidraça da varanda (Norte, y=7.59) cai no centro da imagem (bearing ~-1.7° a partir da câmara sala); zona da cozinha (bearing +24.9°, a Este) aparece à direita do centro — confirma que yaw positivo = direita da imagem = Este.",
+  "_calibrationNotes": "Todos os yaws calculados geometricamente e depois verificados no browser (Playwright, clique real em cada hotspot + inspecção visual do alvo). Uma correcção foi feita: suite→closet estimado inicialmente em -177.3° (assumindo porta em x≈1.40, alinhada com a câmara do closet) ficava com a porta cortada na margem do ecrã; teste empírico mostrou a porta bem centrada a yaw≈145°, implicando que a abertura real fica mais a Este (x≈2.2) do que o valor aproximado do briefing — closet→suite manteve-se em 0.0° (Norte geométrico, consistente com a adjacência da planta; a porta não é claramente visível no render de teste mas a transição de cena está correcta).",
+  "_cameras_xy": {
+    "sala": [7.30, 4.30],
+    "cozinha": [8.25, 6.35],
+    "quarto": [4.20, 4.35],
+    "suite": [1.45, 4.55],
+    "closet": [1.40, 2.50],
+    "is": [1.30, 0.98],
+    "is_social": [3.97, 0.98],
+    "hall": [4.60, 2.30],
+    "varanda": [4.80, 8.55]
+  },
+  "scenes": {
+    "sala": {
+      "title": "Sala",
+      "pano": "sala.png",
+      "yaw": 0,
+      "hotSpots": [
+        {"pitch": -3, "yaw": -1.7, "sceneId": "varanda", "text": "Varanda"},
+        {"pitch": -3, "yaw": 24.9, "sceneId": "cozinha", "text": "Cozinha"},
+        {"pitch": -6, "yaw": -141.3, "sceneId": "hall", "text": "Distribuição"}
+      ]
+    },
+    "cozinha": {
+      "title": "Cozinha",
+      "pano": "cozinha.png",
+      "yaw": 0,
+      "hotSpots": [
+        {"pitch": -3, "yaw": -155.1, "sceneId": "sala", "text": "Sala"}
+      ]
+    },
+    "quarto": {
+      "title": "Quarto",
+      "pano": "quarto.png",
+      "yaw": 0,
+      "hotSpots": [
+        {"pitch": -6, "yaw": 147.6, "sceneId": "hall", "text": "Distribuição"},
+        {"pitch": -3, "yaw": 0.9, "sceneId": "varanda", "text": "Varanda"}
+      ]
+    },
+    "suite": {
+      "title": "Suite",
+      "pano": "suite.png",
+      "yaw": 0,
+      "hotSpots": [
+        {"pitch": -6, "yaw": 145.0, "sceneId": "closet", "text": "Walk-in Closet"},
+        {"pitch": -3, "yaw": -0.9, "sceneId": "varanda", "text": "Varanda"}
+      ]
+    },
+    "closet": {
+      "title": "Walk-in Closet",
+      "pano": "closet.png",
+      "yaw": 190,
+      "hotSpots": [
+        {"pitch": -6, "yaw": 97.5, "sceneId": "hall", "text": "Distribuição"},
+        {"pitch": -6, "yaw": 0.0, "sceneId": "suite", "text": "Suite"},
+        {"pitch": -6, "yaw": -173.9, "sceneId": "is", "text": "I.S. Suite"}
+      ]
+    },
+    "is": {
+      "title": "I.S. Suite",
+      "pano": "is.png",
+      "yaw": 180,
+      "hotSpots": [
+        {"pitch": -6, "yaw": 0.0, "sceneId": "closet", "text": "Walk-in Closet"}
+      ]
+    },
+    "is_social": {
+      "title": "I.S.",
+      "pano": "is_social.png",
+      "yaw": 180,
+      "hotSpots": [
+        {"pitch": -6, "yaw": 0.0, "sceneId": "hall", "text": "Distribuição"}
+      ]
+    },
+    "hall": {
+      "title": "Distribuição",
+      "pano": "hall.png",
+      "yaw": 60,
+      "hotSpots": [
+        {"pitch": -6, "yaw": 90.5, "sceneId": "sala", "text": "Sala"},
+        {"pitch": -6, "yaw": 26.9, "sceneId": "quarto", "text": "Quarto"},
+        {"pitch": -6, "yaw": -90.0, "sceneId": "closet", "text": "Walk-in Closet"},
+        {"pitch": -6, "yaw": -141.8, "sceneId": "is_social", "text": "I.S."}
+      ]
+    },
+    "varanda": {
+      "title": "Varanda",
+      "pano": "varanda.png",
+      "yaw": 200,
+      "hotSpots": [
+        {"pitch": -3, "yaw": 111.8, "sceneId": "sala", "text": "Sala"},
+        {"pitch": -3, "yaw": -150.2, "sceneId": "quarto", "text": "Quarto"},
+        {"pitch": -3, "yaw": -105.8, "sceneId": "suite", "text": "Suite"}
+      ]
+    }
+  }
+}
