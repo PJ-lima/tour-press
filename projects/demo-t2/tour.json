@@ -57,7 +57,7 @@
       "yaw": 190,
       "hotSpots": [
         {"pitch": -6, "yaw": 97.5, "sceneId": "hall", "text": "Distribuição"},
-        {"pitch": -6, "yaw": 0.0, "sceneId": "suite", "text": "Suite"},
+        {"pitch": -6, "yaw": 42.0, "sceneId": "suite", "text": "Suite"},
         {"pitch": -6, "yaw": -173.9, "sceneId": "is", "text": "I.S. Suite"}
       ]
     },
