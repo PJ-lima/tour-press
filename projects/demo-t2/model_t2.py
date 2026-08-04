@@ -1,4 +1,4 @@
-"""Constrói scene.blend do T2 de demonstração — headless.
+"""Constrói scene.blend do T2 demo — headless.
 
 Uso:
     source pipeline/env.sh
@@ -21,66 +21,29 @@ import bmesh
 import bpy
 from mathutils import Vector
 
-# ---------------------------------------------------------------- constantes
-
-CEIL = 2.60            # pé-direito
-WALL_INT = 0.12        # espessura de divisória interior
-WALL_EXT = 0.25        # espessura de parede exterior
-SLAB = 0.15            # espessura da laje de piso (z -0.15..0) e de tecto (2.60..2.75)
-DOOR_W = 0.90
-DOOR_H = 2.10          # verga da porta
-GLAZ_H = 2.26          # altura do vão envidraçado (soleira a z=0, correr até ao tecto)
-FRAME = 0.06           # espessura dos caixilhos
-GLASS_T = 0.03         # espessura do vidro
-RAIL_H = 1.00          # altura da guarda de vidro da varanda
-
-ROOMS = {
-    #                x0     x1     y0     y1
-    "suite":       (0.00,  2.80,  3.56,  7.59),   # 2.80×4.03 = 11.28
-    "closet":      (0.00,  2.80,  1.62,  3.44),   # 2.80×1.82 = 5.10
-    "is_suite":    (0.00,  2.60,  0.00,  1.50),   # 2.60×1.50 = 3.90
-    "quarto":      (2.92,  5.57,  3.09,  7.59),   # 2.65×4.50 = 11.93
-    "hall":        (2.92,  5.57,  1.62,  2.97),   # distribuição ≈ 3.36
-    "is_social":   (2.72,  5.22,  0.00,  1.50),   # 2.50×1.50 = 3.75
-    "arrumo":      (5.34,  6.90,  0.00,  1.30),   # 1.56×1.30 = 2.03
-    "sala":        (5.69,  9.60,  1.54,  7.59),   # 3.91×6.05 = 23.65 (cozinha na parede leste)
-    "varanda":     (0.00,  9.60,  7.84,  9.30),   # 9.60×1.46 ≈ 14.15, fora da fachada
-}
-
-INTERIOR_ROOMS = [n for n in ROOMS if n != "varanda"]
-
-# Vãos entre divisões: (div_a, div_b, t0, t1, altura). t = coordenada tangente à parede
-# partilhada (Y se a parede for vertical, X se for horizontal). Sem folhas de porta —
-# vãos abertos, para não bloquear as vistas do tour.
-DOORS = [
-    ("hall", "quarto",    4.62, 5.52, DOOR_H),
-    ("hall", "closet",    1.95, 2.85, DOOR_H),
-    ("hall", "is_social", 3.88, 4.78, DOOR_H),
-    ("hall", "sala",      1.74, 2.84, DOOR_H),   # passagem aberta 1,10 m
-    ("closet", "suite",   1.85, 2.75, DOOR_H),
-    ("closet", "is_suite", 1.10, 2.00, DOOR_H),
-    ("sala", "arrumo",    5.67, 6.57, DOOR_H),
-]
-
-# Porta de entrada: parede sul da sala (a leste do arrumo, junto à fachada nascente).
-ENTRANCE = ("sala", 8.20, 9.10, DOOR_H)
-
-# Portas de vidro de correr para a varanda, na fachada norte y=7.59: (divisão, x0, x1)
-GLAZING = [
-    ("suite",  0.30, 2.50),
-    ("quarto", 3.20, 5.30),
-    ("sala",   6.00, 8.35),   # nembo cheio a nascente (x 8.35..9.60), conforme planta
-]
-
-# Envolvente exterior (mar + costa distante): sem isto a metade inferior do panorama da
-# varanda é vazio preto — o céu Nishita só preenche o hemisfério superior.
-GROUND_Z = -6.00           # cota do mar, ~2 pisos abaixo do apartamento
-GROUND_R = 400.0           # semi-extensão do plano de água
-
-# Limites do conjunto (para enquadrar a câmara de QA)
-BOUNDS = (-WALL_EXT, 9.60 + WALL_EXT, -WALL_EXT, 9.30)
-
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# ---------------------------------------------------------------- constantes
+#
+# Todas as cotas vivem em geometry.py (python puro, sem bpy) para que o pipeline as possa
+# ler sem Blender instalado — é de lá que saem o teste de hotspots do build e o SVG do
+# minimapa. Aqui só se importa; não duplicar valores neste ficheiro.
+
+ROOT = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(ROOT, "pipeline"))
+
+import pbr  # noqa: E402  (depende do sys.path acima)
+
+pbr.library(os.path.join(ROOT, "assets", "library"))
+
+from geometry import (  # noqa: E402  (depende do sys.path acima)
+    CEIL, WALL_INT, WALL_EXT, SLAB, DOOR_W, DOOR_H, GLAZ_H, FRAME, GLASS_T, RAIL_H,
+    ROOMS, INTERIOR_ROOMS, DOORS, ENTRANCE, GLAZING, GROUND_Z, GROUND_R, BOUNDS,
+    CAM_SPOTS, CAM_Z, CAM_CLEAR, CAM_CLEAR_ROOM, CAM_CLEAR_XY, CAM_XY_MIN_TOP,
+    CAM_ROOM,
+    find_partitions, door_for,
+)
 
 _LOG_COUNT = {"walls": 0, "slabs": 0, "glass": 0}
 
@@ -192,38 +155,8 @@ def wall_run(name, kind, f0, f1, t0, t1, openings, coll, z0=0.0, z1=CEIL):
 
 # ---------------------------------------------------------------- topologia
 
-def find_partitions():
-    """Detecta divisórias interiores a partir dos rects: pares de divisões adjacentes
-    com uma folga <= 0.35 m num eixo e sobreposição no outro. A parede preenche a folga."""
-    parts = []
-    names = INTERIOR_ROOMS
-    for i, a in enumerate(names):
-        ax0, ax1, ay0, ay1 = ROOMS[a]
-        for b in names[i + 1:]:
-            bx0, bx1, by0, by1 = ROOMS[b]
-            # parede vertical (normal em X)
-            ov0, ov1 = max(ay0, by0), min(ay1, by1)
-            if ov1 - ov0 > 0.05:
-                for g0, g1, lo, hi in ((ax1, bx0, a, b), (bx1, ax0, b, a)):
-                    if 1e-6 < g1 - g0 <= 0.35:
-                        parts.append(dict(kind="x", lo=lo, hi=hi,
-                                          f0=g0, f1=g1, t0=ov0, t1=ov1))
-            # parede horizontal (normal em Y)
-            oh0, oh1 = max(ax0, bx0), min(ax1, bx1)
-            if oh1 - oh0 > 0.05:
-                for g0, g1, lo, hi in ((ay1, by0, a, b), (by1, ay0, b, a)):
-                    if 1e-6 < g1 - g0 <= 0.35:
-                        parts.append(dict(kind="y", lo=lo, hi=hi,
-                                          f0=g0, f1=g1, t0=oh0, t1=oh1))
-    return parts
-
-
-def door_for(a, b):
-    key = frozenset((a, b))
-    for ra, rb, t0, t1, h in DOORS:
-        if frozenset((ra, rb)) == key:
-            return (t0, t1, 0.0, h)
-    return None
+# `find_partitions()` e `door_for()` vivem em geometry.py — o teste de hotspots do build e o
+# minimapa usam exactamente as mesmas paredes e vãos que a cena construída aqui.
 
 
 # ---------------------------------------------------------------- construção
@@ -365,11 +298,18 @@ def build_geometry():
 SUN_W = 3.0            # W/m² (irradiância do sol, conforme brief)
 SUN_ELEV = 18.0        # graus acima do horizonte — fim de tarde
 SUN_AZ = 135.0         # graus a partir de +X, anti-horário → 135° = noroeste
-SKY_STRENGTH = 0.28    # intensidade do céu Nishita (mais azul de ambiente = menos sépia)
-EXPOSURE = 1.35        # exposição de filme (stops)
-WARM_3500K = (1.0, 0.845, 0.700)  # ~3500 K em RGB linear (menos sépia que 3000 K)
-FILL_W_PER_M2 = 0.55   # area lights de tecto: divisões com envidraçado (W/m²)
-FILL_W_DARK = 2.2      # idem, divisões interiores sem luz natural (W/m²)
+# Céu de tarde limpa, não de pôr-do-sol: o `belfast_sunset` punha uma dominante laranja
+# em tudo (paredes castanhas, mar branco) e o mar é o argumento de venda desta casa.
+SKY_HDRI = "kloofendal_48d_partly_cloudy_puresky"   # assets/library/hdri (CC0 Poly Haven)
+SKY_ROT = 210.0        # graus: roda o HDRI para o sol cair a noroeste, sobre o mar
+SKY_STRENGTH = 1.0     # HDRI já vem calibrado — ao contrário do Nishita, não leva 0.28
+EXPOSURE = 0.15        # exposição de filme (stops); desceu de +1.35 quando as paredes
+                       # passaram de albedo 0.26 para 0.78 (a casa reflecte 3× mais)
+# ~4200 K: o HDRI de fim de tarde já traz o quente todo. Com 3500 K a soma das duas
+# fontes empurrava tudo para sépia e as paredes liam-se castanhas.
+WARM_4200K = (1.0, 0.925, 0.845)
+FILL_W_PER_M2 = 1.60   # area lights de tecto: divisões com envidraçado (W/m²)
+FILL_W_DARK = 3.20     # idem, divisões interiores sem luz natural (W/m²)
 
 FURN = []              # objectos de mobiliário (para o teste de folgas)
 
@@ -539,33 +479,44 @@ def _art_mat(name, kind, c1, c2, c3, scale=6.0, distortion=0.0, rough=0.80):
 def build_materials():
     M = {}
     # soalho carvalho claro (tábuas 1,30 × 0,19)
-    M["floor"] = _brick_mat("chao_carvalho", "z", 1.30, 0.19,
-                            (0.372, 0.243, 0.129), (0.318, 0.200, 0.102),
-                            (0.220, 0.135, 0.068), 0.0018, 0.30,
-                            bump=0.12, jitter=0.18)
+    # Superfícies grandes levam textura fotográfica CC0 (assets/library) em vez de
+    # procedural: é a diferença entre "render de arquitecto" e maquete. As pequenas
+    # (metais, louça, vidro) ficam procedurais — aí a textura não acrescenta nada.
+    M["floor"] = pbr.tex_material("chao_carvalho", "wood_floor", size=2.6,
+                                  rough_mult=0.95, normal_strength=0.7, coat=0.12)
     # paredes / tectos
-    M["wall"] = _pbr("parede_offwhite", (0.760, 0.745, 0.715), rough=0.90)
+    # cor lisa + relevo do reboco: o difuso da amostra é castanho (albedo linear 0.26) e
+    # punha a casa toda sépia — tinta de parede é ~0.75 de reflectância, quase neutra
+    M["wall"] = pbr.tex_material("parede_offwhite", "beige_wall_001", size=3.2,
+                                 base_color=(0.780, 0.772, 0.752), normal_strength=0.35)
     _noise_bump(M["wall"], scale=180.0, strength=0.03)
-    M["ceil"] = _pbr("tecto_branco", (0.840, 0.835, 0.825), rough=0.92)
+    M["ceil"] = _pbr("tecto_branco", (0.860, 0.858, 0.852), rough=0.92)
     M["wall_accent"] = _pbr("parede_taupe", (0.420, 0.395, 0.360), rough=0.90)
     # azulejo (2 orientações + chão)
     tile_c1 = (0.745, 0.750, 0.752)
     tile_c2 = (0.700, 0.706, 0.712)
     tile_j = (0.575, 0.582, 0.590)
-    M["tile_x"] = _brick_mat("azulejo_x", "x", 0.30, 0.30, tile_c1, tile_c2,
-                             tile_j, 0.012, 0.16, bump=0.30, jitter=0.06)
-    M["tile_y"] = _brick_mat("azulejo_y", "y", 0.30, 0.30, tile_c1, tile_c2,
-                             tile_j, 0.012, 0.16, bump=0.30, jitter=0.06)
+    # mármore cinza nas I.S.: um único material serve as duas orientações, porque a
+    # projecção box já resolve paredes e chão sem UVs
+    # As I.S. ficam procedurais de propósito: o catálogo CC0 de pedra/azulejo é todo
+    # exterior e rústico (o "grey_cartago" é lousa ferruginosa) e lia-se como ferrugem
+    # numa casa de banho. Porcelânico de grande formato não tem variação fotográfica
+    # nenhuma — só junta e brilho, que o procedural dá melhor e sem dominante.
+    M["tile_x"] = _brick_mat("azulejo_x", "x", 0.60, 0.60, tile_c1, tile_c2,
+                             tile_j, 0.010, 0.14, bump=0.22, jitter=0.03)
+    M["tile_y"] = _brick_mat("azulejo_y", "y", 0.60, 0.60, tile_c1, tile_c2,
+                             tile_j, 0.010, 0.14, bump=0.22, jitter=0.03)
     M["tile_floor"] = _brick_mat("azulejo_chao", "z", 0.60, 0.60,
-                                 (0.330, 0.325, 0.318), (0.300, 0.298, 0.292),
-                                 (0.250, 0.248, 0.245), 0.008, 0.22,
-                                 bump=0.20, jitter=0.05)
+                                 (0.470, 0.470, 0.468), (0.442, 0.444, 0.446),
+                                 (0.360, 0.362, 0.364), 0.008, 0.20,
+                                 bump=0.18, jitter=0.04)
     M["deck"] = _brick_mat("pavimento_varanda", "z", 0.60, 0.30,
                            (0.400, 0.388, 0.368), (0.372, 0.362, 0.344),
                            (0.300, 0.294, 0.282), 0.010, 0.45,
                            bump=0.25, jitter=0.08)
     # cozinha
-    M["stone"] = _pbr("bancada_pedra", (0.055, 0.055, 0.058), rough=0.18, coat=0.3)
+    M["stone"] = pbr.tex_material("bancada_marmore", "marble_01", size=1.6,
+                                  rough_mult=0.35, normal_strength=0.25, coat=0.45)
     _noise_bump(M["stone"], scale=340.0, strength=0.04)
     M["lacquer"] = _pbr("lacado_claro", (0.780, 0.775, 0.760), rough=0.26, coat=0.25)
     M["steel"] = _pbr("inox", (0.640, 0.645, 0.650), rough=0.28, metal=1.0)
@@ -576,14 +527,36 @@ def build_materials():
     M["frame"] = _pbr("caixilho_antracite", (0.055, 0.057, 0.060), rough=0.42,
                       metal=0.85)
     # tecidos e madeiras
-    M["fabric"] = _pbr("tecido_sofa", (0.245, 0.278, 0.320), rough=0.88, sheen=0.35)
+    # o mesmo linho serve sofá, cama e tapete — muda o tinte e a escala do ladrilho
+    # Têxteis: cor lisa + trama (normal/rugosidade) da amostra. O difuso do `rough_linen`
+    # é claramente azul (linear 0.28/0.41/0.62) e nenhum tinte o neutraliza — multiplicar
+    # preserva a razão entre canais, era isso que deixava a roupa de cama azul-clara.
+    # A 0.55 m de ladrilho a trama do linho não se lê a 2 m de distância e o sofá saía
+    # como um bloco cinzento liso. Ladrilho mais curto e normal mais forte devolvem o
+    # tecido; o tom desce de cinza-médio para azul-ardósia, que não compete com a madeira.
+    M["fabric"] = pbr.tex_material("tecido_sofa", "rough_linen", size=0.30,
+                                   base_color=(0.115, 0.126, 0.148),
+                                   normal_strength=2.0, sheen=0.35)
     _noise_bump(M["fabric"], scale=420.0, strength=0.14)
-    M["cushion"] = _pbr("almofada_terracota", (0.470, 0.255, 0.175), rough=0.90,
-                        sheen=0.4)
-    M["linen"] = _pbr("linho_cama", (0.795, 0.775, 0.735), rough=0.92, sheen=0.4)
+    # Almofadas: cor lisa lia-se a plástico. Mesma trama do linho, ladrilho curto porque a
+    # peça tem 45 cm — a 2.0 m o ladrilho dava uma face inteira sem variação.
+    M["cushion"] = pbr.tex_material("almofada_terracota", "rough_linen", size=0.20,
+                                    base_color=(0.330, 0.150, 0.098),
+                                    normal_strength=1.8, sheen=0.5)
+    M["cushion2"] = pbr.tex_material("almofada_areia", "rough_linen", size=0.20,
+                                     base_color=(0.475, 0.408, 0.318),
+                                     normal_strength=1.8, sheen=0.5)
+    M["linen"] = pbr.tex_material("linho_cama", "rough_linen", size=0.42,
+                                  base_color=(0.720, 0.706, 0.674),
+                                  normal_strength=1.4, sheen=0.4)
     _noise_bump(M["linen"], scale=380.0, strength=0.12)
+    M["sheer"] = pbr.tex_material("cortinado_linho", "rough_linen", size=0.30,
+                                  base_color=(0.700, 0.690, 0.665),
+                                  normal_strength=1.0, sheen=0.7)
     M["throw"] = _pbr("manta", (0.330, 0.360, 0.375), rough=0.92, sheen=0.4)
-    M["rug"] = _pbr("tapete_la", (0.560, 0.535, 0.495), rough=0.96, sheen=0.5)
+    M["rug"] = pbr.tex_material("tapete_la", "rough_linen", size=0.30,
+                                base_color=(0.300, 0.262, 0.208),
+                                normal_strength=1.8, sheen=0.5)
     _noise_bump(M["rug"], scale=260.0, strength=0.30)
     M["walnut"] = _pbr("nogueira", (0.185, 0.108, 0.062), rough=0.36, coat=0.15)
     _noise_bump(M["walnut"], scale=45.0, strength=0.025)
@@ -764,6 +737,29 @@ class Piece:
             f.smooth = True
         return vs
 
+    def drape(self, x0, x1, y, z0, z1, mat, amp=0.05, waves=5, cols=40):
+        """Pano vertical ondulado no plano XZ — cortinado.
+
+        A onda em seno é o que separa um cortinado de um rectângulo de pano: dá as pregas
+        e, com elas, o gradiente de luz vertical que o olho lê como tecido pendurado.
+        """
+        cols_v = []
+        for i in range(cols + 1):
+            t = i / float(cols)
+            x = x0 + (x1 - x0) * t
+            yy = y + amp * math.sin(t * waves * 2.0 * math.pi)
+            cols_v.append((self.bm.verts.new((x, yy, z0)),
+                           self.bm.verts.new((x, yy, z1))))
+        idx = self._slot(mat)
+        for i in range(cols):
+            a, b = cols_v[i]
+            c, d = cols_v[i + 1]
+            f = self.bm.faces.new((a, c, d, b))
+            f.smooth = True
+            f.material_index = idx
+        self.bm.normal_update()
+        return [v for pair in cols_v for v in pair]
+
     def finish(self):
         me = bpy.data.meshes.new(self.name)
         self.bm.to_mesh(me)
@@ -828,8 +824,8 @@ def sofa(M, face, ox, oy, w=2.10, d=0.92, name="sofa"):
         u0 = 0.19 + i * seat + 0.015
         L.b(u0, u0 + seat - 0.03, 0.22, d - 0.05, 0.40, 0.50, fab)
         L.b(u0 + 0.04, u0 + seat - 0.07, 0.20, 0.30, 0.50, 0.74, fab)
-    for u in (0.30, w - 0.72):
-        L.b(u, u + 0.42, 0.26, 0.34, 0.48, 0.88, M["cushion"])
+    # as almofadas do sofá vêm da biblioteca CC0 (ver PROPS): as caixas que aqui estavam
+    # ficavam dentro do modelo apendado, geometria a atravessar geometria
     for u, v in ((0.06, 0.08), (w - 0.12, 0.08), (0.06, d - 0.14), (w - 0.12, d - 0.14)):
         L.b(u, u + 0.06, v, v + 0.06, 0.0, 0.12, wd)
     return P.finish()
@@ -857,9 +853,8 @@ def dining_table(M, cx, cy, w, d, h=0.75, name="mesa_jantar"):
             y = cy + sy * (d / 2 - 0.09)
             P.box(x - 0.035, x + 0.035, y - 0.035, y + 0.035, 0.0, h - 0.045,
                   M["oak"])
-    # centro de mesa
-    P.cyl(cx, cy, h, h + 0.085, 0.075, M["ceramic"], r2=0.058)
-    P.sphere(cx, cy, h + 0.135, 0.075, M["plant2"], sz=0.65)
+    # o centro de mesa é a taça de madeira da biblioteca (ver PROPS): o vaso com esfera
+    # verde que aqui estava era exactamente o "isto parece maquete"
     return P.finish()
 
 
@@ -948,6 +943,20 @@ def bed(M, face, ox, oy, w=1.62, l=2.02, headboard=0.0, name="cama"):
         L.b(-0.02, w + 0.02, 0.0, 0.12, 0.26, 0.26 + headboard, M["fabric"])
     else:
         L.b(0.0, w, 0.0, 0.06, 0.10, 0.95, M["walnut"])
+    return P.finish()
+
+
+def curtains(M, x0, x1, y=7.44, name="cortinado", panel=0.62, z1=2.50):
+    """Dois panos recolhidos nas ombreiras de um envidraçado, mais a calha.
+
+    Não fecham o vão: a vista para o mar é o argumento de venda da casa. Servem de
+    enquadramento — sem eles, cada vão é um rectângulo de vidro colado a uma parede lisa.
+    """
+    P = Piece(name, furn_coll())
+    for a, b in ((x0 - 0.10, x0 - 0.10 + panel), (x1 + 0.10 - panel, x1 + 0.10)):
+        P.drape(a, b, y, 0.02, z1, M["sheer"], amp=0.045, waves=4)
+    # calha: cilindro ao longo de X, feito por caixa fina (o cilindro do Piece é vertical)
+    P.box(x0 - 0.20, x1 + 0.20, y - 0.02, y + 0.02, z1, z1 + 0.035, M["black"])
     return P.finish()
 
 
@@ -1121,15 +1130,31 @@ def mirror_panel(M, face, ox, oy, w, h, z0, name="espelho"):
 
 
 def toilet(M, face, ox, oy, name="sanita"):
-    """ox, oy = canto do autoclismo encostado à parede (u=0, v=0). Largura 0.40."""
+    """ox, oy = canto do autoclismo encostado à parede (u=0, v=0). Largura 0.40.
+
+    A cuba e o tampo eram duas lajes de 6 cm sobre um pé de 12 cm: de cima lia-se como
+    duas folhas brancas pousadas no chão. Agora o pé acompanha a cuba em toda a
+    profundidade e a frente é redonda, que é o que dá a silhueta de sanita.
+    """
     P = Piece(name, furn_coll())
     L = Local(P, face, ox, oy)
-    L.b(0.02, 0.38, 0.0, 0.16, 0.22, 0.86, M["ceramic"])        # autoclismo
-    L.b(0.14, 0.26, 0.14, 0.30, 0.0, 0.40, M["ceramic"])        # pé
-    L.b(0.03, 0.37, 0.14, 0.68, 0.36, 0.42, M["ceramic"])       # cuba
-    L.b(0.02, 0.38, 0.13, 0.70, 0.42, 0.455, M["ceramic"])      # tampo
-    L.b(0.14, 0.26, 0.02, 0.06, 0.80, 0.84, M["chrome"])
-    return P.finish()
+    cer = M["ceramic"]
+    L.b(0.02, 0.38, 0.0, 0.17, 0.30, 0.88, cer)                 # autoclismo
+    L.b(0.0, 0.40, 0.0, 0.19, 0.88, 0.915, cer)                 # tampo do autoclismo
+    # pé: da parede até sob a frente da cuba, a estreitar — sem isto a cuba flutuava
+    L.b(0.09, 0.31, 0.08, 0.50, 0.0, 0.34, cer)
+    L.c(0.20, 0.50, 0.0, 0.34, 0.11, cer)
+    # cuba: caixa + nariz redondo
+    L.b(0.03, 0.37, 0.12, 0.52, 0.30, 0.42, cer)
+    L.c(0.20, 0.52, 0.30, 0.42, 0.17, cer)
+    # assento e tampo, a acompanhar a mesma planta
+    L.b(0.025, 0.375, 0.11, 0.53, 0.42, 0.455, cer)
+    L.c(0.20, 0.53, 0.42, 0.455, 0.175, cer)
+    L.b(0.14, 0.26, 0.02, 0.06, 0.82, 0.86, M["chrome"])        # botão
+    ob = P.finish()
+    # louça não tem arestas vivas; o bevel geral de 4 mm é pouco a esta escala
+    pbr.bevel_all([ob], width=0.012, segments=3, angle_deg=50.0)
+    return ob
 
 
 def shower(M, face, ox, oy, w=1.42, d=0.62, screen_len=None, name="duche"):
@@ -1192,44 +1217,56 @@ def furnish_sala(M):
     # (parede sul, x 8.20..9.10).
     # --- zona de estar (sul): sofá na parede poente virado a nascente, TV a nascente
     rug(M, 6.40, 8.70, 2.90, 5.05)
-    sofa(M, "E", 5.75, 5.00, w=2.05, d=0.92)          # y 2.95..5.00
+    # o bevel geral de 4 mm serve mesas e armários mas deixava o sofá com arestas de
+    # marcenaria; estofo pede um raio uma ordem de grandeza acima
+    upholstery = sofa(M, "E", 5.75, 5.00, w=2.05, d=0.92)   # y 2.95..5.00
+    pbr.bevel_all([upholstery], width=0.022, segments=4, angle_deg=55.0)
     coffee_table(M, 7.55, 3.50, 1.00, 0.62)
     tv_unit(M, "W", 9.58, 3.05, w=1.30, d=0.42)       # y 3.05..4.35, por baixo do frigorífico
     tv_panel(M, "W", 9.57, 3.15, w=1.10, h=0.64, z0=0.95)
     # quadro por cima do sofá (parede poente; a nascente a essa cota está a TV)
     wall_art(M, "E", 5.70, 4.48, 1.00, 0.68, 1.22, M["art2"], name="quadro_sala")
-    plant(M, 6.05, 7.28, h=1.20, r=0.26, name="planta_sala")
+    # planta real da biblioteca (ver PROPS) — as esferas verdes eram o detalhe mais
+    # amador do render anterior
     # --- zona de refeição (norte, entre o envidraçado e a cozinha)
     dining_table(M, 7.00, 6.30, 1.50, 0.90)
-    for cx in (6.60, 7.40):
-        chair(M, "N", cx, 5.57, name="cadeira_s_%.0f" % (cx * 100))
-        chair(M, "S", cx, 7.03, name="cadeira_n_%.0f" % (cx * 100))
+    # as quatro cadeiras vêm da biblioteca CC0 (ver PROPS): são a peça mais próxima da
+    # câmara na vista principal da sala e as de caixa liam-se logo como maquete
     pendant(M, 7.00, 6.30, z=2.02, name="pendente_jantar")
     # --- cozinha (metade norte da parede leste)
     kitchen_run(M)
 
 
+# As camas correm no sentido do comprimento da divisão (cabeceira na parede SUL, pés para o
+# envidraçado), não atravessadas na parede comprida. Um quarto tem 2,65 m de largura: uma
+# cama de 2,00 m encostada à parede oeste deixava 0,61 m entre os pés e a parede este — não
+# se passava. Assim a cama ocupa 1,62 m da largura e sobra 1,03 m de circulação a toda a
+# extensão, e o comprimento da divisão (4,50 m) absorve os 2,00 m da cama.
+
 def furnish_quarto(M):
-    rug(M, 3.30, 5.40, 5.00, 7.15, name="tapete_quarto")
-    bed(M, "E", 2.96, 6.95, w=1.62, l=2.00, name="cama_quarto")
-    nightstand(M, "E", 2.96, 5.33, name="cabeceira_q_s")
-    nightstand(M, "E", 2.96, 7.38, name="cabeceira_q_n")
-    table_lamp(M, 3.16, 5.13, 0.46, name="candeeiro_q_s")
-    table_lamp(M, 3.16, 7.18, 0.46, name="candeeiro_q_n")
-    wardrobe(M, "N", 2.96, 3.13, w=1.50, d=0.60, h=2.30, doors=3,
+    # cama x 2.96–4.58, y 3.15–5.15 (livre da porta do hall, que abre em x 4.62–5.52)
+    bed(M, "N", 2.96, 3.15, w=1.62, l=2.00, name="cama_quarto")
+    # sem mesa de cabeceira: a cama encosta à parede sul e o lado livre é a passagem de
+    # entrada — uma cabeceira ali é o primeiro móvel contra o qual se esbarra, e sem
+    # candeeiro (retirado por não caber) não tinha função nenhuma
+    rug(M, 3.10, 4.80, 5.10, 6.80, name="tapete_quarto")
+    # roupeiro na parede este, a norte da cama — não estreita a faixa de passagem
+    wardrobe(M, "W", 5.57, 5.70, w=1.50, d=0.60, h=2.30, doors=3,
              name="roupeiro_quarto")
-    wall_art(M, "E", 2.93, 6.55, 0.90, 0.62, 1.30, M["art1"], name="quadro_quarto")
+    wall_art(M, "E", 2.93, 6.40, 0.90, 0.62, 1.30, M["art1"], name="quadro_quarto")
+    # a parede da cabeceira ficava vazia — é o enquadramento que a câmara do quarto apanha
+    # de frente, e uma parede nua a ocupar meio panorama lê-se como obra por acabar
+    wall_art(M, "N", 3.28, 3.10, 0.98, 0.66, 1.42, M["art3"],
+             name="quadro_quarto_cabeceira")
 
 
 def furnish_suite(M):
-    rug(M, 0.45, 2.55, 5.05, 7.20, name="tapete_suite")
-    bed(M, "E", 0.06, 7.05, w=1.62, l=2.00, headboard=0.92, name="cama_suite")
-    nightstand(M, "E", 0.06, 5.43, name="cabeceira_s_s")
-    nightstand(M, "E", 0.06, 7.47, name="cabeceira_s_n")
-    table_lamp(M, 0.27, 5.23, 0.46, name="candeeiro_s_s")
-    table_lamp(M, 0.27, 7.27, 0.46, name="candeeiro_s_n")
-    bench(M, "W", 2.52, 5.60, w=1.30, d=0.40, name="banco_suite")
-    plant(M, 2.35, 7.25, h=1.20, r=0.28, name="planta_suite")
+    # cama x 0.06–1.68, y 3.62–5.62 (livre da porta do closet, em x 1.85–2.75)
+    bed(M, "N", 0.06, 3.62, w=1.62, l=2.00, headboard=0.92, name="cama_suite")
+    # idem quarto: cabeceira retirada, ficava na passagem de entrada
+    rug(M, 0.40, 2.20, 5.80, 7.30, name="tapete_suite")
+    # o banco que estava a oeste deixava 0,06 m entre ele e a cama — retirado.
+    # quadro na parede sul, acima da cabeceira (1,18 m de topo)
     wall_art(M, "N", 0.35, 3.57, 0.95, 0.66, 1.25, M["art3"], name="quadro_suite")
 
 
@@ -1243,10 +1280,17 @@ def furnish_closet(M):
 def furnish_is(M, room, mirror=True):
     x0, x1, y0, y1 = ROOMS[room]
     tag = room.replace("is_", "")
+    # Duche a poente, lavatório na parede sul, sanita no canto nascente.
+    #
+    # A colisão não era da sanita, era do móvel: 1.10 × 0.47 numa parede de 2.50 m fazia a
+    # gaveta cruzar a cuba. Com 0.85 × 0.38 o curso da gaveta desce para 38 cm e o móvel
+    # acaba 35 cm antes da sanita (25 na social, que é 10 cm mais estreita). Chegou-se aqui
+    # comparando três plantas em render e em planta — a alternativa era trocar as duas
+    # peças de sítio, que media melhor mas punha o espelho fora do eixo de quem entra.
     shower(M, "E", x0 + 0.04, y1 - 0.04, w=1.42, d=0.62, name="duche_%s" % tag)
-    vanity(M, "N", x0 + 0.90, y0 + 0.02, w=1.10, d=0.47, name="lavatorio_%s" % tag)
+    vanity(M, "N", x0 + 0.68, y0 + 0.02, w=0.85, d=0.38, name="lavatorio_%s" % tag)
     if mirror:
-        mirror_panel(M, "N", x0 + 0.98, y0 + 0.02, 0.94, 0.85, 1.05,
+        mirror_panel(M, "N", x0 + 0.73, y0 + 0.02, 0.75, 0.85, 1.05,
                      name="espelho_%s" % tag)
     toilet(M, "W", x1 - 0.02, y0 + 0.50, name="sanita_%s" % tag)
 
@@ -1257,15 +1301,29 @@ def furnish_hall(M):
     for x in (3.00, 3.54):
         P.box(x, x + 0.04, 1.70, 1.74, 0.0, 0.72, M["black"])
         P.box(x, x + 0.04, 1.90, 1.94, 0.0, 0.72, M["black"])
-    P.cyl(3.42, 1.81, 0.78, 0.86, 0.055, M["ceramic"], r2=0.045)
-    P.sphere(3.42, 1.81, 0.94, 0.11, M["plant2"], sz=0.85)
     P.finish()
     mirror_panel(M, "N", 3.06, 1.64, 0.50, 0.85, 1.02, name="espelho_hall")
 
 
 def furnish_arrumo(M):
-    shelf_unit(M, "E", 5.38, 1.26, w=1.20, d=0.42, h=2.05, rows=4,
-               name="estante_arrumo")
+    """Estante em U: poente, sul e nascente. A parede norte fica livre porque é onde
+    está o vão para a sala (x 5.67..6.57).
+
+    d=0.28 em vez de 0.32 e a câmara recuada para (6.12, 0.92) — ver CAM_SPOTS. Com três
+    paredes ocupadas sobram 0.96 × 1.00 m de chão, que é o que um arrumo desta área dá:
+    a alternativa era manter uma única estante e uma divisão vazia.
+    """
+    d = 0.28
+    x0, x1, y0, y1 = ROOMS["arrumo"]
+    # poente: da estante sul até ao vão, virada a nascente
+    shelf_unit(M, "E", x0 + 0.04, y1 - 0.02, w=y1 - 0.02 - (y0 + d + 0.02), d=d,
+               h=2.05, rows=4, name="estante_arrumo_o")
+    # nascente: mesma altura, virada a poente
+    shelf_unit(M, "W", x1 - 0.04, y0 + d + 0.02, w=y1 - 0.02 - (y0 + d + 0.02), d=d,
+               h=2.05, rows=4, name="estante_arrumo_e")
+    # sul: entre as duas, virada a norte
+    shelf_unit(M, "N", x0 + d + 0.06, y0 + 0.04, w=x1 - x0 - 2 * d - 0.14, d=d,
+               h=2.05, rows=4, name="estante_arrumo_s")
 
 
 def furnish_varanda(M):
@@ -1275,7 +1333,6 @@ def furnish_varanda(M):
           name="cadeira_var_o")
     chair(M, "W", 7.98, 8.58, w=0.52, d=0.54, seat=M["throw"], frame=M["frame"],
           name="cadeira_var_e")
-    plant(M, 1.30, 8.55, h=1.05, r=0.26, name="planta_varanda")
 
 
 def build_furniture(M):
@@ -1295,7 +1352,73 @@ def build_furniture(M):
     furnish_hall(M)
     furnish_arrumo(M)
     furnish_varanda(M)
+    for room, g0, g1 in GLAZING:
+        curtains(M, g0, g1, name="cortinado_%s" % room)
+    pbr.bevel_all(FURN)
+    props(M)
     log("mobiliário: %d peças" % len(FURN))
+
+
+# Adereços da biblioteca CC0: plantas, almofadas, cadeiras e loiça reais em vez de esferas
+# e caixas. Ficam FORA de FURN de propósito — a verificação de folgas percorre polígono a
+# polígono em python e estes modelos têm dezenas de milhares de faces; as posições abaixo
+# são escolhidas dentro de espaço já validado como livre.
+# A colocação é pelo centro da base do conjunto (ver pbr.append_model), não pela origem
+# do ficheiro do asset.
+PROPS = [
+    # sem planta no canto sudeste da sala: à escala real o vaso ocupa 20 cm num canto de
+    # 4 m vazio e lê-se como objecto esquecido, não como decoração
+    ("potted_plant_01", (2.30, 7.10, 0.0), -35.0, 0.9, "planta_suite"),
+    # sobre a consola (tampo a 0.78): o hall tem 1.35 m de profundidade e uma planta de
+    # chão lia-se como obstáculo a meio da passagem
+    ("potted_plant_01", (3.28, 1.81, 0.78), 15.0, 0.45, "planta_hall"),
+    # assento do sofá: topo a 0.50, x 5.97..6.62 (o encosto ocupa x 5.75..5.95)
+    ("throw_pillows_01", (6.28, 3.45, 0.50), 90.0, 0.80, "almofadas_sofa_s"),
+    ("throw_pillows_01", (6.28, 4.55, 0.50), 90.0, 0.80, "almofadas_sofa_n"),
+    # cadeiras de jantar reais: a mesa (7.00, 6.30) mede 1.50 × 0.90, logo y 5.85..6.75.
+    # O modelo tem as costas em +Y, portanto as do lado sul levam 180°.
+    ("dining_chair_02", (6.60, 5.52, 0.0), 180.0, 1.0, "cadeira_s_660"),
+    ("dining_chair_02", (7.40, 5.52, 0.0), 180.0, 1.0, "cadeira_s_740"),
+    ("dining_chair_02", (6.60, 7.08, 0.0), 0.0, 1.0, "cadeira_n_660"),
+    ("dining_chair_02", (7.40, 7.08, 0.0), 0.0, 1.0, "cadeira_n_740"),
+    ("wooden_bowl_01", (7.00, 6.30, 0.75), 0.0, 1.0, "taca_mesa"),
+    # almofadas decorativas à frente das de dormir, sobre o edredão (topo a 0.62)
+    ("throw_pillows_01", (3.77, 3.86, 0.615), 0.0, 0.62, "almofadas_quarto"),
+    ("throw_pillows_01", (0.87, 4.32, 0.615), 0.0, 0.62, "almofadas_suite"),
+    ("wicker_basket_01", (0.45, 3.15, 0.0), -20.0, 1.0, "cesto_closet"),
+    ("potted_plant_04", (1.30, 8.55, 0.0), -60.0, 0.85, "planta_varanda"),
+    # bancada da cozinha: face interior a x=8.965, tampo a 0.90
+    ("ceramic_vase_02", (9.22, 5.58, 0.90), 0.0, 1.0, "jarra_cozinha"),
+]
+
+
+# O `throw_pillows_01` da biblioteca vem com um ziguezague vermelho e ocre dos anos 70 —
+# aparecia no sofá e nas duas camas, e era o único padrão saturado do apartamento. Só o
+# material é trocado: a geometria amarrotada do asset é o que dá o ar de tecido usado.
+PROP_MATERIALS = {
+    "almofadas_sofa_s": "cushion",
+    "almofadas_sofa_n": "cushion2",
+    "almofadas_quarto": "cushion",
+    "almofadas_suite": "cushion2",
+}
+
+
+def props(M):
+    coll = furn_coll()
+    placed = 0
+    for slug, loc, rot, scale, name in PROPS:
+        root = pbr.append_model(slug, coll, location=loc, rotation_z=rot, scale=scale,
+                                name=name)
+        if not root:
+            continue
+        placed += 1
+        mat = M.get(PROP_MATERIALS.get(name, ""))
+        if mat:
+            for ob in root.children_recursive:
+                for slot in ob.material_slots:
+                    slot.material = mat
+    log("adereços da biblioteca: %d de %d (%d retexturados)"
+        % (placed, len(PROPS), len(PROP_MATERIALS)))
 
 
 # ---------------------------------------------------------------- luz
@@ -1304,25 +1427,10 @@ def lighting(M):
     scene = bpy.context.scene
     lights = get_collection("Lights")
 
-    # --- céu Nishita
-    world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
-    scene.world = world
-    world.use_nodes = True
-    nt = world.node_tree
-    nt.nodes.clear()
-    out = nt.nodes.new("ShaderNodeOutputWorld")
-    bg = nt.nodes.new("ShaderNodeBackground")
-    bg.inputs["Strength"].default_value = SKY_STRENGTH
-    sky = nt.nodes.new("ShaderNodeTexSky")
-    sky.sky_type = "NISHITA"
-    sky.sun_elevation = math.radians(SUN_ELEV)
-    sky.sun_rotation = math.radians(SUN_AZ)
-    sky.sun_disc = False
-    sky.altitude = 60.0
-    sky.air_density = 1.0
-    sky.dust_density = 0.5
-    nt.links.new(sky.outputs["Color"], bg.inputs["Color"])
-    nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
+    # --- céu: HDRI fotográfico de fim de tarde (CC0, sem chão — o mar é geometria nossa)
+    # O Nishita procedural dava um azul uniforme sem nuvens nem gradiente de horizonte;
+    # nos reflexos do vidro e da pedra isso lê-se imediatamente como render sintético.
+    pbr.world_hdri(SKY_HDRI, strength=SKY_STRENGTH, rotation_deg=SKY_ROT)
 
     # --- sol
     az, el = math.radians(SUN_AZ), math.radians(SUN_ELEV)
@@ -1336,8 +1444,8 @@ def lighting(M):
     sun.location = to_sun * 24.0 + Vector((4.8, 4.0, 0.0))
     sun.rotation_euler = (-to_sun).to_track_quat("-Z", "Y").to_euler()
     lights.objects.link(sun)
-    log("sol %.1f W/m² elev=%.0f° azim=%.0f° (NO) + céu Nishita %.2f"
-        % (SUN_W, SUN_ELEV, SUN_AZ, SKY_STRENGTH))
+    log("sol %.1f W/m² elev=%.0f° azim=%.0f° (NO) + HDRI %s (rot %.0f°, %.2f)"
+        % (SUN_W, SUN_ELEV, SUN_AZ, SKY_HDRI, SKY_ROT, SKY_STRENGTH))
 
     # --- luz de tecto fraca e quente por divisão (evita cantos negros); as divisões
     # sem envidraçado levam mais potência, pois não recebem luz natural directa
@@ -1351,7 +1459,7 @@ def lighting(M):
         d.size_y = max(0.5, (y1 - y0) * 0.55)
         d.energy = (area * FILL_W_PER_M2 if name in glazed
                     else max(6.0, area * FILL_W_DARK))
-        d.color = WARM_3500K
+        d.color = WARM_4200K
         ob = bpy.data.objects.new("luz_%s" % name, d)
         ob.location = ((x0 + x1) / 2.0, (y0 + y1) / 2.0, CEIL - 0.05)
         ob.visible_camera = False       # não aparece como rectângulo branco
@@ -1363,13 +1471,13 @@ def lighting(M):
     kd.size = 0.50
     kd.size_y = 2.20
     kd.energy = 20.0
-    kd.color = WARM_3500K
+    kd.color = WARM_4200K
     kob = bpy.data.objects.new("luz_cozinha", kd)
     kob.location = (9.28, 6.30, CEIL - 0.08)
     kob.visible_camera = False
     lights.objects.link(kob)
 
-    log("area lights 3500 K: %d divisões (%.2f W/m² c/ vão, %.2f W/m² interiores)"
+    log("area lights 4200 K: %d divisões (%.2f W/m² c/ vão, %.2f W/m² interiores)"
         % (len(INTERIOR_ROOMS), FILL_W_PER_M2, FILL_W_DARK))
 
 
@@ -1424,23 +1532,8 @@ def furnish():
     log("etapa furnish concluída — %d objectos na cena" % len(bpy.data.objects))
 
 
-# Pontos de câmara panorâmica, por divisão — FONTE ÚNICA das coordenadas: `CAMS` (as
-# câmaras reais) deriva daqui, para não voltarem a divergir do que o QA verifica.
-CAM_SPOTS = {
-    "sala": (7.30, 4.30), "cozinha": (8.25, 6.35), "quarto": (4.20, 4.35),
-    "suite": (1.45, 4.55), "closet": (1.40, 2.50), "is_suite": (1.30, 0.98),
-    "is_social": (3.97, 0.98), "hall": (4.60, 2.30), "varanda": (4.80, 8.55),
-}
-CAM_Z = 1.55
-CAM_CLEAR = 0.55       # folga 3D (a câmara não pode ficar dentro de uma peça)
-CAM_CLEAR_XY = 0.45    # folga EM PLANTA: a câmara não pode ficar por cima de mobília
-CAM_XY_MIN_TOP = 0.25  # peças mais baixas que isto não bloqueiam (tapetes, rodapés)
-
-CAM_ROOM = {  # câmara 360° → divisão em CAM_SPOTS
-    "360_sala": "sala", "360_cozinha": "cozinha", "360_quarto": "quarto",
-    "360_suite": "suite", "360_closet": "closet", "360_is": "is_suite",
-    "360_is_social": "is_social", "360_hall": "hall", "360_varanda": "varanda",
-}
+# Pontos de câmara panorâmica: `CAM_SPOTS`/`CAM_ROOM` vêm de geometry.py — `CAMS` (as
+# câmaras reais) deriva daí, para não voltarem a divergir do que o QA verifica.
 CAMS = {cam: CAM_SPOTS[room] for cam, room in CAM_ROOM.items()}
 
 
@@ -1580,13 +1673,14 @@ def qa_clearance_check():
     """
     bad = 0
     for room, (cx, cy) in sorted(CAM_SPOTS.items()):
+        clear = CAM_CLEAR_ROOM.get(room, CAM_CLEAR)
         worst, worst_ob = 1e9, None
         worst_xy, worst_xy_ob = 1e9, None
         for ob in FURN:
             d = _piece_distance(ob, cx, cy, CAM_Z)
             if d < worst:
                 worst, worst_ob = d, ob.name
-            if d < CAM_CLEAR:
+            if d < clear:
                 log("AVISO folga 3D: %-10s ←→ %-22s %.3f m" % (room, ob.name, d))
                 bad += 1
             h = _piece_distance_xy(ob, cx, cy)
@@ -1598,8 +1692,10 @@ def qa_clearance_check():
                 bad += 1
         log("folga mínima %-10s 3D %.2f m (%-22s)  planta %.2f m (%s)"
             % (room, worst, worst_ob, worst_xy, worst_xy_ob))
-    log("QA folgas de câmara: %d conflitos (3D >= %.2f m, planta >= %.2f m acima de %.2f m)"
-        % (bad, CAM_CLEAR, CAM_CLEAR_XY, CAM_XY_MIN_TOP))
+    log("QA folgas de câmara: %d conflitos (3D >= %.2f m, planta >= %.2f m acima de %.2f m; "
+        "excepções: %s)"
+        % (bad, CAM_CLEAR, CAM_CLEAR_XY, CAM_XY_MIN_TOP,
+           ", ".join("%s %.2f" % kv for kv in sorted(CAM_CLEAR_ROOM.items())) or "nenhuma"))
     return bad
 
 

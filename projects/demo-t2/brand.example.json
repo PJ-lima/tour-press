@@ -1,0 +1,9 @@
+{
+  "_": "Copiar para brand.json (que NÃO é commitado) e preencher com os dados do promotor. Sem brand.json o tour sai sem cartão de contacto. Só `name` é obrigatório.",
+  "name": "Nome do promotor / mediadora",
+  "tagline": "Visitas mediante marcação",
+  "phone": "+351 900 000 000",
+  "email": "geral@exemplo.pt",
+  "url": "https://exemplo.pt/imovel/t2-demo",
+  "url_label": "Ficha do imóvel"
+}

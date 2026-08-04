@@ -1,19 +1,9 @@
 {
-  "title": "Demo T2 — Tour Virtual",
+  "title": "T2 demo — Tour Virtual",
   "firstScene": "sala",
   "_yawConvention": "Câmaras 360 Blender: rotation_euler=(90°,0,0) para todas — o centro horizontal do render equirectangular (yaw=0 no Pannellum) aponta para +Y do mundo (Norte). +X do mundo é Este. yaw = atan2(dx, dy) em graus, dx = alvo.x - câmara.x, dy = alvo.y - câmara.y (bearing tipo bússola, sentido horário a partir do Norte). Verificado empiricamente em sala.png: vidraça da varanda (Norte, y=7.59) cai no centro da imagem (bearing ~-1.7° a partir da câmara sala); zona da cozinha (bearing +24.9°, a Este) aparece à direita do centro — confirma que yaw positivo = direita da imagem = Este.",
-  "_calibrationNotes": "Todos os yaws calculados geometricamente e depois verificados no browser (Playwright, clique real em cada hotspot + inspecção visual do alvo). Uma correcção foi feita: suite→closet estimado inicialmente em -177.3° (assumindo porta em x≈1.40, alinhada com a câmara do closet) ficava com a porta cortada na margem do ecrã; teste empírico mostrou a porta bem centrada a yaw≈145°, implicando que a abertura real fica mais a Este (x≈2.2) do que o valor aproximado do briefing — closet→suite manteve-se em 0.0° (Norte geométrico, consistente com a adjacência da planta; a porta não é claramente visível no render de teste mas a transição de cena está correcta).",
-  "_cameras_xy": {
-    "sala": [7.30, 4.30],
-    "cozinha": [8.25, 6.35],
-    "quarto": [4.20, 4.35],
-    "suite": [1.45, 4.55],
-    "closet": [1.40, 2.50],
-    "is": [1.30, 0.98],
-    "is_social": [3.97, 0.98],
-    "hall": [4.60, 2.30],
-    "varanda": [4.80, 8.55]
-  },
+  "_calibrationNotes": "Os yaws são agora verificados automaticamente pelo build: pipeline/build_tour.py lança o arco angular de cada vão (geometry.py: DOORS/GLAZING) a partir da câmara da cena e falha se o yaw declarado cair fora dele. Três valores estavam a 0.0 (placeholders nunca calibrados, mesma classe do bug closet→suite que apontava a parede maciça) e foram postos no centro do respectivo vão: is→closet 15.7, is_social→hall 22.8, hall→is_social -164.7. Acrescentado cozinha→varanda (-28.2, centro do envidraçado da sala). O yaw inicial do closet passou de 190 para 90: entra-se do hall pelo lado este, e a 90° o hall e a porta da suite ficam ambos no enquadramento de entrada.",
+  "_cameras_xy": "Removido: as coordenadas das câmaras vivem em projects/demo-t2/geometry.py (CAM_SPOTS), fonte única partilhada pelo modelo Blender e pelo build. Duplicá-las aqui já deixou este ficheiro a mentir uma vez.",
   "scenes": {
     "sala": {
       "title": "Sala",
@@ -22,7 +12,8 @@
       "hotSpots": [
         {"pitch": -3, "yaw": -1.7, "sceneId": "varanda", "text": "Varanda"},
         {"pitch": -3, "yaw": 24.9, "sceneId": "cozinha", "text": "Cozinha"},
-        {"pitch": -6, "yaw": -141.3, "sceneId": "hall", "text": "Distribuição"}
+        {"pitch": -6, "yaw": -141.3, "sceneId": "hall", "text": "Distribuição"},
+        {"pitch": -6, "yaw": -158.1, "sceneId": "arrumo", "text": "Arrumo"}
       ]
     },
     "cozinha": {
@@ -30,7 +21,8 @@
       "pano": "cozinha.png",
       "yaw": 0,
       "hotSpots": [
-        {"pitch": -3, "yaw": -155.1, "sceneId": "sala", "text": "Sala"}
+        {"pitch": -3, "yaw": -155.1, "sceneId": "sala", "text": "Sala"},
+        {"pitch": -3, "yaw": -28.2, "sceneId": "varanda", "text": "Varanda"}
       ]
     },
     "quarto": {
@@ -38,8 +30,8 @@
       "pano": "quarto.png",
       "yaw": 0,
       "hotSpots": [
-        {"pitch": -6, "yaw": 147.6, "sceneId": "hall", "text": "Distribuição"},
-        {"pitch": -3, "yaw": 0.9, "sceneId": "varanda", "text": "Varanda"}
+        {"pitch": -6, "yaw": 160.6, "sceneId": "hall", "text": "Distribuição"},
+        {"pitch": -3, "yaw": 9.4, "sceneId": "varanda", "text": "Varanda"}
       ]
     },
     "suite": {
@@ -47,17 +39,17 @@
       "pano": "suite.png",
       "yaw": 0,
       "hotSpots": [
-        {"pitch": -6, "yaw": 145.0, "sceneId": "closet", "text": "Walk-in Closet"},
-        {"pitch": -3, "yaw": -0.9, "sceneId": "varanda", "text": "Varanda"}
+        {"pitch": -6, "yaw": 162.4, "sceneId": "closet", "text": "Walk-in Closet"},
+        {"pitch": -3, "yaw": 2.6, "sceneId": "varanda", "text": "Varanda"}
       ]
     },
     "closet": {
       "title": "Walk-in Closet",
       "pano": "closet.png",
-      "yaw": 190,
+      "yaw": 90,
       "hotSpots": [
-        {"pitch": -6, "yaw": 97.5, "sceneId": "hall", "text": "Distribuição"},
-        {"pitch": -6, "yaw": 0.0, "sceneId": "suite", "text": "Suite"},
+        {"pitch": -6, "yaw": 97.5, "sceneId": "hall", "text": "← Distribuição"},
+        {"pitch": -6, "yaw": 42.0, "sceneId": "suite", "text": "Suite"},
         {"pitch": -6, "yaw": -173.9, "sceneId": "is", "text": "I.S. Suite"}
       ]
     },
@@ -66,7 +58,7 @@
       "pano": "is.png",
       "yaw": 180,
       "hotSpots": [
-        {"pitch": -6, "yaw": 0.0, "sceneId": "closet", "text": "Walk-in Closet"}
+        {"pitch": -6, "yaw": 15.7, "sceneId": "closet", "text": "Walk-in Closet"}
       ]
     },
     "is_social": {
@@ -74,7 +66,7 @@
       "pano": "is_social.png",
       "yaw": 180,
       "hotSpots": [
-        {"pitch": -6, "yaw": 0.0, "sceneId": "hall", "text": "Distribuição"}
+        {"pitch": -6, "yaw": 22.8, "sceneId": "hall", "text": "Distribuição"}
       ]
     },
     "hall": {
@@ -84,8 +76,16 @@
       "hotSpots": [
         {"pitch": -6, "yaw": 90.5, "sceneId": "sala", "text": "Sala"},
         {"pitch": -6, "yaw": 26.9, "sceneId": "quarto", "text": "Quarto"},
-        {"pitch": -6, "yaw": -90.0, "sceneId": "closet", "text": "Walk-in Closet"},
-        {"pitch": -6, "yaw": -141.8, "sceneId": "is_social", "text": "I.S."}
+        {"pitch": -6, "yaw": -90.0, "sceneId": "closet", "text": "Walk-in Closet → Suite"},
+        {"pitch": -6, "yaw": -164.7, "sceneId": "is_social", "text": "I.S."}
+      ]
+    },
+    "arrumo": {
+      "title": "Arrumo",
+      "pano": "arrumo.png",
+      "yaw": 310,
+      "hotSpots": [
+        {"pitch": -6, "yaw": -10.0, "sceneId": "sala", "text": "Sala"}
       ]
     },
     "varanda": {

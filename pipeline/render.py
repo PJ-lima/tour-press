@@ -25,6 +25,8 @@ def parse_args():
     parser.add_argument("--out", required=True, help="pasta de destino dos renders")
     parser.add_argument("--samples", type=int, default=128)
     parser.add_argument("--res", type=int, default=4096, help="largura; altura = largura/2")
+    parser.add_argument("--only", default="", help="lista separada por vírgulas de divisões "
+                        "a renderizar (ex.: quarto,suite); vazio = todas")
     return parser.parse_args(argv)
 
 
@@ -34,12 +36,28 @@ def setup_cycles(scene, samples, width):
     scene.cycles.use_denoising = True
     prefs = bpy.context.preferences.addons.get("cycles")
     if prefs:
-        # usa GPU se existir; cai para CPU sem falhar
-        try:
-            prefs.preferences.compute_device_type = "CUDA"
+        # Definir compute_device_type não chega: sem get_devices() + device.use=True o
+        # Cycles não vê nenhum dispositivo e renderiza em CPU à mesma, em silêncio.
+        cprefs = prefs.preferences
+        enabled = []
+        for kind in ("OPTIX", "CUDA"):
+            try:
+                cprefs.compute_device_type = kind
+            except TypeError:
+                continue
+            devices = cprefs.get_devices_for_type(kind) if hasattr(
+                cprefs, "get_devices_for_type") else []
+            enabled = [d for d in devices if d.type == kind]
+            for d in devices:
+                d.use = (d.type == kind)
+            if enabled:
+                break
+        if enabled:
             scene.cycles.device = "GPU"
-        except TypeError:
+            print(f"[render] GPU {kind}: {', '.join(d.name for d in enabled)}")
+        else:
             scene.cycles.device = "CPU"
+            print("[render] sem GPU disponível — CPU")
     scene.render.resolution_x = width
     scene.render.resolution_y = width // 2
     scene.render.resolution_percentage = 100
@@ -63,6 +81,13 @@ def main():
     setup_cycles(scene, args.samples, args.res)
 
     cams = [o for o in scene.objects if o.type == "CAMERA" and o.name.startswith("360_")]
+    if args.only:
+        wanted = {n.strip() for n in args.only.split(",") if n.strip()}
+        cams = [c for c in cams if c.name.removeprefix("360_") in wanted]
+        missing = wanted - {c.name.removeprefix("360_") for c in cams}
+        if missing:
+            print(f"ERRO: sem câmara para {', '.join(sorted(missing))}", file=sys.stderr)
+            sys.exit(1)
     if not cams:
         print("ERRO: nenhuma câmara '360_*' na cena", file=sys.stderr)
         sys.exit(1)

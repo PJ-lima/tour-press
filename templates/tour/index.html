@@ -14,18 +14,135 @@
     html, body { margin: 0; height: 100%; }
     #panorama { width: 100%; height: 100%; }
     #brand {
-      position: absolute; top: 12px; left: 12px; z-index: 10;
+      /* 46px e não 12: os botões de zoom e de ecrã inteiro do Pannellum ocupam a coluna
+         esquerda até x≈40, e o título ficava por baixo deles */
+      position: absolute; top: 12px; left: 46px; z-index: 10;
       font-family: system-ui, sans-serif; font-size: 13px;
       color: #fff; background: rgba(0,0,0,.55);
       padding: 6px 12px; border-radius: 6px;
+    }
+
+    /* ---- cartão do promotor (só existe se o projecto tiver brand.json) ---- */
+    #cta {
+      /* 46px e não 12: o Pannellum põe a barra com o nome da cena no canto inferior
+         esquerdo e o cartão tapava-a */
+      position: absolute; left: 12px; bottom: 46px; z-index: 10;
+      max-width: 260px; padding: 10px 14px; border-radius: 8px;
+      background: rgba(255,255,255,.94); color: #3c3a36;
+      font-family: system-ui, sans-serif; line-height: 1.45;
+      box-shadow: 0 2px 12px rgba(0,0,0,.35);
+    }
+    #cta:empty { display: none; }
+    #cta .cta-name { font-weight: 600; font-size: 14px; }
+    #cta .cta-line { font-size: 12px; color: #6b665e; }
+    #cta .cta-links { margin-top: 5px; font-size: 12px; }
+    #cta a { color: #c8562b; text-decoration: none; }
+    #cta a:hover { text-decoration: underline; }
+
+    /* ---- minimapa da planta ---- */
+    #minimap {
+      position: absolute; right: 12px; bottom: 12px; z-index: 10;
+      width: 236px; background: rgba(255,255,255,.94);
+      border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.35);
+      font-family: system-ui, sans-serif; overflow: hidden;
+    }
+    #minimap:empty { display: none; }
+    #minimap-toggle {
+      display: none; width: 100%; box-sizing: border-box;
+      border: 0; border-top: 1px solid rgba(0,0,0,.12);
+      background: none; color: #3c3a36; font: 12px system-ui, sans-serif;
+      padding: 7px 0; cursor: pointer;
+    }
+    #minimap .plan { display: block; width: 100%; height: auto; }
+    #minimap .cam { cursor: pointer; }
+    #minimap .dot { fill: #b8b2a8; stroke: #fff; stroke-width: .05; transition: fill .2s; }
+    #minimap .cam:hover .dot, #minimap .cam:focus .dot { fill: #7d766a; }
+    #minimap .cam:focus { outline: none; }
+    #minimap .cam.active .dot { fill: #c8562b; }
+    #minimap .cone { fill: #c8562b; opacity: .22; display: none; }
+    #minimap .cam.active .cone { display: block; }
+
+    @media (max-width: 640px) {
+      /* o minimapa ocupa 168 px à direita: o cartão fica com o resto, senão sobrepõem-se */
+      #cta { left: 8px; bottom: 42px; max-width: calc(100% - 196px); padding: 8px 10px; }
+      #cta .cta-name { font-size: 13px; }
+      #cta .cta-line, #cta .cta-links { font-size: 11px; }
+      #minimap { width: 168px; right: 8px; bottom: 8px; }
+      #minimap-toggle { display: block; }
+      #minimap.collapsed { width: auto; }
+      #minimap.collapsed .plan { display: none; }
     }
   </style>
 </head>
 <body>
   <div id="panorama"></div>
   <div id="brand">{{TITLE}}</div>
+  <div id="cta">{{CTA}}</div>
+  <div id="minimap">{{MINIMAP_SVG}}</div>
   <script>
-    pannellum.viewer('panorama', {{TOUR_CONFIG}});
+    var viewer = pannellum.viewer('panorama', {{TOUR_CONFIG}});
+
+    // Minimapa: pontos clicáveis + cone que mostra para onde a vista aponta.
+    // As coordenadas vêm já em unidades do SVG (metros, Y invertido).
+    (function () {
+      var CAMS = {{CAM_POINTS}};
+      var map = document.getElementById('minimap');
+      var svg = map.querySelector('svg');
+      if (!svg) { return; }
+
+      var groups = {};
+      Array.prototype.forEach.call(svg.querySelectorAll('.cam'), function (g) {
+        var id = g.getAttribute('data-scene');
+        groups[id] = g;
+        function go() { if (viewer.getScene() !== id) { viewer.loadScene(id); } }
+        g.addEventListener('click', go);
+        g.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+        });
+      });
+
+      var CONE_R = 1.15;      // alcance do cone, em metros de planta
+      var CONE_HALF = 26;     // meia-abertura em graus, ~ao FOV horizontal do viewer
+
+      function drawCone(id, yaw) {
+        var g = groups[id], pt = CAMS[id];
+        if (!g || !pt) { return; }
+        // yaw do Pannellum = rumo de bússola (0 = Norte = topo do minimapa, +Este).
+        // Em SVG o Y cresce para baixo, daí o seno/cosseno nesta ordem e o sinal do Y.
+        var a0 = (yaw - CONE_HALF) * Math.PI / 180, a1 = (yaw + CONE_HALF) * Math.PI / 180;
+        var p = function (a) {
+          return (pt[0] + CONE_R * Math.sin(a)).toFixed(3) + ' ' +
+                 (pt[1] - CONE_R * Math.cos(a)).toFixed(3);
+        };
+        g.querySelector('.cone').setAttribute(
+          'd', 'M' + pt[0] + ' ' + pt[1] + ' L' + p(a0) +
+               ' A' + CONE_R + ' ' + CONE_R + ' 0 0 1 ' + p(a1) + ' Z');
+      }
+
+      var current = null, lastYaw = null;
+      function sync() {
+        var id;
+        try { id = viewer.getScene(); } catch (e) { requestAnimationFrame(sync); return; }
+        if (id !== current) {
+          if (groups[current]) { groups[current].classList.remove('active'); }
+          if (groups[id]) { groups[id].classList.add('active'); }
+          current = id;
+          lastYaw = null;
+        }
+        var yaw = viewer.getYaw();
+        if (yaw !== lastYaw) { drawCone(current, yaw); lastYaw = yaw; }
+        requestAnimationFrame(sync);
+      }
+      // uma única cadeia de rAF: 'load' dispara a cada mudança de cena e empilharia
+      // um loop novo por cima do anterior, todos a sondar getYaw() para sempre
+      requestAnimationFrame(sync);
+
+      var toggle = document.createElement('button');
+      toggle.id = 'minimap-toggle';
+      toggle.textContent = 'Planta';
+      toggle.addEventListener('click', function () { map.classList.toggle('collapsed'); });
+      map.appendChild(toggle);
+    })();
   </script>
 </body>
 </html>

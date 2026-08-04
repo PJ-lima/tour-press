@@ -1,15 +1,40 @@
-# artefactos gerados
+# Blender
+*.blend1
+*.blend2
+
+# cenas geradas (regeneráveis a partir de model_t2.py)
 projects/*/scene.blend
+
+# saídas de render e QA (pesadas — regeneráveis)
 projects/*/renders*/
-projects/*/views/
-projects/*/clips*/
-projects/*/dist/
 projects/*/qa/
+projects/*/views/
+projects/*/clips/
+projects/*/clips9x16/
 projects/*/teaser*.mp4
+
+# builds (regeneráveis; comitar só se servidos via GitHub Pages)
+projects/*/dist/
+
+# Python
 __pycache__/
-# material de trabalho local — nunca commitar
+*.pyc
+
+# biblioteca CC0 descarregada — reconstruída por assets/library/fetch.py, não se commita
+assets/library/texturas/
+assets/library/hdri/
+assets/library/modelos/
+assets/library/**/*.blend
+assets/library/**/*.hdr
+assets/library/**/*.exr
+
+# material de trabalho local — NUNCA commitar num repo público
 docs/
 *.pdf
 NOTES.md
 .superpowers/
 .playwright-mcp/
+projects/*/plantas/
+
+# cartão de contacto do promotor — dados do cliente, não vão para um repo público
+projects/*/brand.json

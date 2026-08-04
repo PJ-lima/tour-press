@@ -21,9 +21,15 @@ from PIL import Image
 
 
 def perspective_view(pano, yaw_deg, pitch_deg, fov_deg, width, height):
-    """Projecção gnomónica: recorta uma vista rectilinear do equirect."""
+    """Projecção gnomónica: recorta uma vista rectilinear do equirect.
+
+    pitch positivo = olhar para cima, como no Pannellum. A rotação abaixo faz o
+    contrário (o raio central desce quando o pitch sobe), pelo que o sinal é
+    invertido aqui: sem isto o teaser pedia -10° "a olhar para o chão" e saíam
+    planos de tecto.
+    """
     ph, pw = pano.shape[:2]
-    yaw, pitch, fov = map(np.radians, (yaw_deg, pitch_deg, fov_deg))
+    yaw, pitch, fov = map(np.radians, (yaw_deg, -pitch_deg, fov_deg))
 
     f = (width / 2) / np.tan(fov / 2)
     u = np.arange(width) - (width - 1) / 2
