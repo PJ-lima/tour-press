@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Demo T2 — Tour Virtual</title>
+  <title>Ocean Side · T2 Fracção AB — Tour Virtual</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"
         integrity="sha384-02yn80EH0cF+s23taAmuhEZ04p3CTbQvV0QZMr2reUxajpfvcLNKlzsPkZwx14mf"
         crossorigin="anonymous">
@@ -19,13 +19,117 @@
       color: #fff; background: rgba(0,0,0,.55);
       padding: 6px 12px; border-radius: 6px;
     }
+
+    /* ---- cartão do promotor (só existe se o projecto tiver brand.json) ---- */
+    #cta {
+      /* 46px e não 12: o Pannellum põe a barra com o nome da cena no canto inferior
+         esquerdo e o cartão tapava-a */
+      position: absolute; left: 12px; bottom: 46px; z-index: 10;
+      max-width: 260px; padding: 10px 14px; border-radius: 8px;
+      background: rgba(255,255,255,.94); color: #3c3a36;
+      font-family: system-ui, sans-serif; line-height: 1.45;
+      box-shadow: 0 2px 12px rgba(0,0,0,.35);
+    }
+    #cta:empty { display: none; }
+    #cta .cta-name { font-weight: 600; font-size: 14px; }
+    #cta .cta-line { font-size: 12px; color: #6b665e; }
+    #cta .cta-links { margin-top: 5px; font-size: 12px; }
+    #cta a { color: #c8562b; text-decoration: none; }
+    #cta a:hover { text-decoration: underline; }
+
+    /* ---- minimapa da planta ---- */
+    #minimap {
+      position: absolute; right: 12px; bottom: 12px; z-index: 10;
+      width: 236px; background: rgba(255,255,255,.94);
+      border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.35);
+      font-family: system-ui, sans-serif; overflow: hidden;
+    }
+    #minimap:empty { display: none; }
+    #minimap-toggle {
+      display: none; width: 100%; box-sizing: border-box;
+      border: 0; border-top: 1px solid rgba(0,0,0,.12);
+      background: none; color: #3c3a36; font: 12px system-ui, sans-serif;
+      padding: 7px 0; cursor: pointer;
+    }
+    #minimap .plan { display: block; width: 100%; height: auto; }
+    #minimap .cam { cursor: pointer; }
+    #minimap .dot { fill: #b8b2a8; stroke: #fff; stroke-width: .05; transition: fill .2s; }
+    #minimap .cam:hover .dot, #minimap .cam:focus .dot { fill: #7d766a; }
+    #minimap .cam:focus { outline: none; }
+    #minimap .cam.active .dot { fill: #c8562b; }
+    #minimap .cone { fill: #c8562b; opacity: .22; display: none; }
+    #minimap .cam.active .cone { display: block; }
+
+    @media (max-width: 640px) {
+      /* o minimapa ocupa 168 px à direita: o cartão fica com o resto, senão sobrepõem-se */
+      #cta { left: 8px; bottom: 42px; max-width: calc(100% - 196px); padding: 8px 10px; }
+      #cta .cta-name { font-size: 13px; }
+      #cta .cta-line, #cta .cta-links { font-size: 11px; }
+      #minimap { width: 168px; right: 8px; bottom: 8px; }
+      #minimap-toggle { display: block; }
+      #minimap.collapsed { width: auto; }
+      #minimap.collapsed .plan { display: none; }
+    }
   </style>
 </head>
 <body>
   <div id="panorama"></div>
-  <div id="brand">Demo T2 — Tour Virtual</div>
+  <div id="brand">Ocean Side · T2 Fracção AB — Tour Virtual</div>
+  <div id="cta"></div>
+  <div id="minimap"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10.10 9.55" class="plan" role="img" aria-label="Planta do apartamento">
+<style>
+  .room  { fill: #f2ede5; stroke: #3c3a36; stroke-width: .07; }
+  .outdoor { fill: #e4ecf1; stroke: #3c3a36; stroke-width: .07; stroke-dasharray: .18 .12; }
+  .cut   { stroke: #f2ede5; stroke-linecap: butt; }
+  .cut-out { stroke: #e4ecf1; }
+  /* halo branco: o rótulo continua legível se um ponto de câmara passar por baixo */
+  .label { fill: #6b665e; font: .32px system-ui, sans-serif; text-anchor: middle;
+           stroke: #f2ede5; stroke-width: .13; paint-order: stroke; }
+  .north { fill: #6b665e; font: .42px system-ui, sans-serif; text-anchor: middle; }
+</style>
+<rect class="room" x="0.25" y="1.71" width="2.8" height="4.03"/>
+<rect class="room" x="0.25" y="5.86" width="2.8" height="1.82"/>
+<rect class="room" x="0.25" y="7.8" width="2.6" height="1.5"/>
+<rect class="room" x="3.17" y="1.71" width="2.65" height="4.5"/>
+<rect class="room" x="3.17" y="6.33" width="2.65" height="1.35"/>
+<rect class="room" x="2.97" y="7.8" width="2.5" height="1.5"/>
+<rect class="room" x="5.59" y="8.0" width="1.56" height="1.3"/>
+<rect class="room" x="5.94" y="1.71" width="3.91" height="6.05"/>
+<rect class="outdoor" x="0.25" y="0.0" width="9.6" height="1.46"/>
+<line class="cut" x1="4.87" y1="6.27" x2="5.77" y2="6.27" stroke-width="0.22"/>
+<line class="cut" x1="3.11" y1="7.35" x2="3.11" y2="6.45" stroke-width="0.22"/>
+<line class="cut" x1="4.13" y1="7.74" x2="5.03" y2="7.74" stroke-width="0.22"/>
+<line class="cut" x1="5.88" y1="7.56" x2="5.88" y2="6.46" stroke-width="0.22"/>
+<line class="cut" x1="2.1" y1="5.8" x2="3.0" y2="5.8" stroke-width="0.22"/>
+<line class="cut" x1="1.35" y1="7.74" x2="2.25" y2="7.74" stroke-width="0.22"/>
+<line class="cut" x1="5.92" y1="7.88" x2="6.82" y2="7.88" stroke-width="0.22"/>
+<line class="cut cut-out" x1="0.55" y1="1.71" x2="2.75" y2="1.71" stroke-width="0.22"/>
+<line class="cut cut-out" x1="3.45" y1="1.71" x2="5.55" y2="1.71" stroke-width="0.22"/>
+<line class="cut cut-out" x1="6.25" y1="1.71" x2="8.6" y2="1.71" stroke-width="0.22"/>
+<line class="cut" x1="8.45" y1="7.76" x2="9.35" y2="7.76" stroke-width="0.22"/>
+<text class="label" x="1.65" y="2.030">Suite</text>
+<text class="label" x="1.65" y="6.180">Closet</text>
+<text class="label" x="1.55" y="8.120">I.S.</text>
+<text class="label" x="4.495" y="2.030">Quarto</text>
+<text class="label" x="4.495" y="6.650">Distrib.</text>
+<text class="label" x="4.22" y="8.120">I.S.</text>
+<text class="label" x="6.37" y="8.320">Arrumo</text>
+<text class="label" x="7.895" y="2.030">Sala</text>
+<text class="label" x="2.362" y="0.830">Varanda</text>
+<text class="north" x="9.65" y="0.55">N ↑</text>
+<g class="cam" data-scene="arrumo" tabindex="0" role="button"><title>arrumo</title><path class="cone" d=""/><circle class="dot" cx="6.55" cy="8.65" r="0.19"/></g>
+<g class="cam" data-scene="closet" tabindex="0" role="button"><title>closet</title><path class="cone" d=""/><circle class="dot" cx="1.65" cy="6.8" r="0.19"/></g>
+<g class="cam" data-scene="cozinha" tabindex="0" role="button"><title>cozinha</title><path class="cone" d=""/><circle class="dot" cx="8.5" cy="2.95" r="0.19"/></g>
+<g class="cam" data-scene="hall" tabindex="0" role="button"><title>hall</title><path class="cone" d=""/><circle class="dot" cx="4.85" cy="7.0" r="0.19"/></g>
+<g class="cam" data-scene="is" tabindex="0" role="button"><title>is</title><path class="cone" d=""/><circle class="dot" cx="1.55" cy="8.32" r="0.19"/></g>
+<g class="cam" data-scene="is_social" tabindex="0" role="button"><title>is_social</title><path class="cone" d=""/><circle class="dot" cx="4.22" cy="8.32" r="0.19"/></g>
+<g class="cam" data-scene="quarto" tabindex="0" role="button"><title>quarto</title><path class="cone" d=""/><circle class="dot" cx="4.15" cy="3.0" r="0.19"/></g>
+<g class="cam" data-scene="sala" tabindex="0" role="button"><title>sala</title><path class="cone" d=""/><circle class="dot" cx="7.55" cy="5.0" r="0.19"/></g>
+<g class="cam" data-scene="suite" tabindex="0" role="button"><title>suite</title><path class="cone" d=""/><circle class="dot" cx="1.55" cy="2.7" r="0.19"/></g>
+<g class="cam" data-scene="varanda" tabindex="0" role="button"><title>varanda</title><path class="cone" d=""/><circle class="dot" cx="5.05" cy="0.75" r="0.19"/></g>
+</svg></div>
   <script>
-    pannellum.viewer('panorama', {
+    var viewer = pannellum.viewer('panorama', {
   "default": {
     "firstScene": "sala",
     "sceneFadeDuration": 800,
@@ -59,6 +163,13 @@
           "sceneId": "hall",
           "text": "Distribuição",
           "type": "scene"
+        },
+        {
+          "pitch": -6,
+          "yaw": -158.1,
+          "sceneId": "arrumo",
+          "text": "Arrumo",
+          "type": "scene"
         }
       ]
     },
@@ -75,6 +186,13 @@
           "sceneId": "sala",
           "text": "Sala",
           "type": "scene"
+        },
+        {
+          "pitch": -3,
+          "yaw": -28.2,
+          "sceneId": "varanda",
+          "text": "Varanda",
+          "type": "scene"
         }
       ]
     },
@@ -87,14 +205,14 @@
       "hotSpots": [
         {
           "pitch": -6,
-          "yaw": 147.6,
+          "yaw": 160.6,
           "sceneId": "hall",
           "text": "Distribuição",
           "type": "scene"
         },
         {
           "pitch": -3,
-          "yaw": 0.9,
+          "yaw": 9.4,
           "sceneId": "varanda",
           "text": "Varanda",
           "type": "scene"
@@ -110,14 +228,14 @@
       "hotSpots": [
         {
           "pitch": -6,
-          "yaw": 145.0,
+          "yaw": 162.4,
           "sceneId": "closet",
           "text": "Walk-in Closet",
           "type": "scene"
         },
         {
           "pitch": -3,
-          "yaw": -0.9,
+          "yaw": 2.6,
           "sceneId": "varanda",
           "text": "Varanda",
           "type": "scene"
@@ -129,13 +247,13 @@
       "type": "equirectangular",
       "panorama": "panos/closet.jpg",
       "autoLoad": true,
-      "yaw": 190,
+      "yaw": 90,
       "hotSpots": [
         {
           "pitch": -6,
           "yaw": 97.5,
           "sceneId": "hall",
-          "text": "Distribuição",
+          "text": "← Distribuição",
           "type": "scene"
         },
         {
@@ -163,7 +281,7 @@
       "hotSpots": [
         {
           "pitch": -6,
-          "yaw": 0.0,
+          "yaw": 15.7,
           "sceneId": "closet",
           "text": "Walk-in Closet",
           "type": "scene"
@@ -179,7 +297,7 @@
       "hotSpots": [
         {
           "pitch": -6,
-          "yaw": 0.0,
+          "yaw": 22.8,
           "sceneId": "hall",
           "text": "Distribuição",
           "type": "scene"
@@ -211,14 +329,30 @@
           "pitch": -6,
           "yaw": -90.0,
           "sceneId": "closet",
-          "text": "Walk-in Closet",
+          "text": "Walk-in Closet → Suite",
           "type": "scene"
         },
         {
           "pitch": -6,
-          "yaw": -141.8,
+          "yaw": -164.7,
           "sceneId": "is_social",
           "text": "I.S.",
+          "type": "scene"
+        }
+      ]
+    },
+    "arrumo": {
+      "title": "Arrumo",
+      "type": "equirectangular",
+      "panorama": "panos/arrumo.jpg",
+      "autoLoad": true,
+      "yaw": 310,
+      "hotSpots": [
+        {
+          "pitch": -6,
+          "yaw": -10.0,
+          "sceneId": "sala",
+          "text": "Sala",
           "type": "scene"
         }
       ]
@@ -255,6 +389,68 @@
     }
   }
 });
+
+    // Minimapa: pontos clicáveis + cone que mostra para onde a vista aponta.
+    // As coordenadas vêm já em unidades do SVG (metros, Y invertido).
+    (function () {
+      var CAMS = {"sala": [7.55, 5.0], "cozinha": [8.5, 2.95], "quarto": [4.15, 3.0], "suite": [1.55, 2.7], "closet": [1.65, 6.8], "is": [1.55, 8.32], "is_social": [4.22, 8.32], "hall": [4.85, 7.0], "varanda": [5.05, 0.75], "arrumo": [6.55, 8.65]};
+      var map = document.getElementById('minimap');
+      var svg = map.querySelector('svg');
+      if (!svg) { return; }
+
+      var groups = {};
+      Array.prototype.forEach.call(svg.querySelectorAll('.cam'), function (g) {
+        var id = g.getAttribute('data-scene');
+        groups[id] = g;
+        function go() { if (viewer.getScene() !== id) { viewer.loadScene(id); } }
+        g.addEventListener('click', go);
+        g.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+        });
+      });
+
+      var CONE_R = 1.15;      // alcance do cone, em metros de planta
+      var CONE_HALF = 26;     // meia-abertura em graus, ~ao FOV horizontal do viewer
+
+      function drawCone(id, yaw) {
+        var g = groups[id], pt = CAMS[id];
+        if (!g || !pt) { return; }
+        // yaw do Pannellum = rumo de bússola (0 = Norte = topo do minimapa, +Este).
+        // Em SVG o Y cresce para baixo, daí o seno/cosseno nesta ordem e o sinal do Y.
+        var a0 = (yaw - CONE_HALF) * Math.PI / 180, a1 = (yaw + CONE_HALF) * Math.PI / 180;
+        var p = function (a) {
+          return (pt[0] + CONE_R * Math.sin(a)).toFixed(3) + ' ' +
+                 (pt[1] - CONE_R * Math.cos(a)).toFixed(3);
+        };
+        g.querySelector('.cone').setAttribute(
+          'd', 'M' + pt[0] + ' ' + pt[1] + ' L' + p(a0) +
+               ' A' + CONE_R + ' ' + CONE_R + ' 0 0 1 ' + p(a1) + ' Z');
+      }
+
+      var current = null, lastYaw = null;
+      function sync() {
+        var id;
+        try { id = viewer.getScene(); } catch (e) { requestAnimationFrame(sync); return; }
+        if (id !== current) {
+          if (groups[current]) { groups[current].classList.remove('active'); }
+          if (groups[id]) { groups[id].classList.add('active'); }
+          current = id;
+          lastYaw = null;
+        }
+        var yaw = viewer.getYaw();
+        if (yaw !== lastYaw) { drawCone(current, yaw); lastYaw = yaw; }
+        requestAnimationFrame(sync);
+      }
+      // uma única cadeia de rAF: 'load' dispara a cada mudança de cena e empilharia
+      // um loop novo por cima do anterior, todos a sondar getYaw() para sempre
+      requestAnimationFrame(sync);
+
+      var toggle = document.createElement('button');
+      toggle.id = 'minimap-toggle';
+      toggle.textContent = 'Planta';
+      toggle.addEventListener('click', function () { map.classList.toggle('collapsed'); });
+      map.appendChild(toggle);
+    })();
   </script>
 </body>
 </html>
